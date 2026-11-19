@@ -14,8 +14,8 @@
 | Enrolment number | Name |
 | --- | --- |
 | S24CSEU0222 | Manaswita Shrivastav |
-| S24CSEU0067 | Lakhan Gupta |
 | S24CSEU0133 | Ayush Singh |
+| S24CSEU0067 | Lakhan Gupta |
 
 ## Problem statement
 
