@@ -9,7 +9,7 @@ data_issues:
   # For each of the 7 kinds: present: true or false.
   # If present is false, leave the other values as null.
   leaking_column:
-    present: null
+    present: false
     column: null           # the column that must not be used as a feature
   unit_mixup:
     present: null
@@ -22,7 +22,7 @@ data_issues:
     value: null            # the special number typed instead of a blank
     count: null            # how many rows have it
   duplicate_rows:
-    present: null
+    present: false
     count: null            # number of EXTRA copies (rows you would delete)
   stuck_sensor:
     present: null
