@@ -1,0 +1,4 @@
+[core]
+    remote = origin
+['remote "origin"']
+    url = https://dagshub.com/Manz203/G004-MP285-Wheat-Yield-Prediction.dvc
