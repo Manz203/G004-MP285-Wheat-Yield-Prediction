@@ -51,14 +51,38 @@ def check_target_typos(df):
     return count
 
 
-def clean_category(value):
-    """Normalise one category label.
+def group_key(value):
+    """Reduce a label to the part that identifies its category.
 
-    Strips spaces and case, then keeps the variety prefix so that
-    truncated labels such as 'HD-.' fall in with 'HD-2967'.
+    Ignores spaces, case and a truncated tail, so 'HD-.', ' HD-2967'
+    and 'Hd-2967' all give the same key.
     """
     label = str(value).strip().upper()
-    return label.split("-")[0].rstrip(".")
+    return label.partition("-")[0].rstrip(".")
+
+
+def canonical_names(values):
+    """Pick the correct spelling for each category.
+
+    Labels are grouped by their key and the spelling used most often
+    in that group wins, so 'HD-2967' beats 'Hd-2967' and 'HD-.'.
+    This keeps the cleaned labels identical to the ones later.csv and
+    holdout_features.csv already use.
+    """
+    names = {}
+
+    for label in values.value_counts().index:
+        key = group_key(label)
+
+        if key not in names:
+            names[key] = str(label).strip()
+
+    return names
+
+
+def clean_category(value, names):
+    """Rewrite one label to the correct spelling for its category."""
+    return names.get(group_key(value), str(value).strip())
 
 
 def check_spelling_variants(df):
@@ -70,7 +94,8 @@ def check_spelling_variants(df):
 
     for column in CATEGORICAL_COLUMNS:
         raw = df[column].unique()
-        cleaned = sorted({clean_category(v) for v in raw})
+        names = canonical_names(df[column])
+        cleaned = sorted({clean_category(v, names) for v in raw})
 
         print(f"\nColumn: {column}")
         print(f"Spellings in the file ({len(raw)}): {sorted(raw)}")
