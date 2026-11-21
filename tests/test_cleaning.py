@@ -92,5 +92,3 @@ def test_preprocessing_imputation():
     # No missing values after preprocessing.
     assert np.isfinite(X_train).all()
     assert np.isfinite(X_val).all()
-
-
