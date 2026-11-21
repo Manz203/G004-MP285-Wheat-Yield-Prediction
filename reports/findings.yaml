@@ -30,12 +30,12 @@ data_issues:
     start_date: null       # first date with the stuck value, YYYY-MM-DD
     end_date: null         # last date with the stuck value, YYYY-MM-DD
   target_typos:
-    present: null
-    count: null            # rows whose target was typed 10 times too big
+    present: true
+    count: 8               # rows whose target was typed 10 times too big
   spelling_variants:
-    present: null
-    column: null
-    true_levels: null      # how many real categories there are after cleaning
+    present: true
+    column: seed_variety
+    true_levels: 3         # how many real categories there are after cleaning
 
 tracking:
   experiment_name: null
