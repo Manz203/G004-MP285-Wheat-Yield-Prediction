@@ -42,9 +42,9 @@ Raw training datasets are version-controlled using **DVC**, not committed direct
 
 - [x] Create the public GitHub repository.
 - [x] Add group and enrolment details to README.
-- [ ] Initialize DVC and commit dataset tracking metadata.
-- [ ] Investigate seven possible data problems in `train.csv`.
-- [ ] Complete the data section of `reports/findings.yaml`.
+- [x] Initialize DVC and commit dataset tracking metadata.
+- [x] Investigate seven possible data problems in `train.csv`.
+- [x] Complete the data section of `reports/findings.yaml`.
 
 ## Submission
 
