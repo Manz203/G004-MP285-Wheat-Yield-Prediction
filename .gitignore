@@ -222,6 +222,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# MLflow local store
-mlflow.db
+# MLflow local runs
 mlruns/
