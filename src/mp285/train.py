@@ -2,9 +2,8 @@
 import hashlib
 from pathlib import Path
 
+import joblib
 import pandas as pd
-import mlflow
-import mlflow.sklearn
 
 from mlflow import MlflowClient
 
@@ -16,17 +15,21 @@ from sklearn.ensemble import (
     GradientBoostingRegressor,
 )
 
-from sklearn.metrics import (
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score,
-)
-
 from src.mp285.cleaning import clean_training_data
 from src.mp285.preprocessing import (
     build_preprocessor,
     FEATURE_COLUMNS,
 )
+from src.mp285.tracking import (
+    setup_tracking,
+    run_experiment,
+    promote_best,
+    load_champion,
+)
+
+
+EXPERIMENT_NAME = "MP285_Wheat_Yield_Prediction"
+REGISTERED_MODEL_NAME = "MP285_Wheat_Yield_Prediction_Model"
 
 
 # --------------------------------------------------
@@ -85,24 +88,12 @@ models = {
 
 
 # --------------------------------------------------
-# 4. MLFLOW CONFIGURATION
+# 4. MODEL TRAINING AND MLFLOW LOGGING
 # --------------------------------------------------
 
-mlflow.set_tracking_uri("sqlite:///mlflow.db")
-mlflow.set_registry_uri("sqlite:///mlflow.db")
-mlflow.set_experiment("MP285_Wheat_Yield_Prediction")
-
-registered_model_name = "MP285_Wheat_Yield_Prediction_Model"
-
-best_model_uris = {}
-
-
-# --------------------------------------------------
-# 5. MODEL TRAINING AND MLFLOW LOGGING
-# --------------------------------------------------
+setup_tracking(EXPERIMENT_NAME)
 
 results = []
-trained_pipelines = {}
 
 for model_name, model in models.items():
 
@@ -111,114 +102,44 @@ for model_name, model in models.items():
         ("model", model),
     ])
 
-    with mlflow.start_run(run_name=model_name):
+    params = {
+        "model_name": model_name,
+        "test_size": 0.2,
+        "random_state": 42,
+        "training_rows": len(X_train),
+        "validation_rows": len(X_val),
+        "data_sha256": data_sha256,
+        **model.get_params(),
+    }
 
-        # Train complete pipeline
-        pipeline.fit(X_train, y_train)
+    run_id, mae = run_experiment(
+        model_name, pipeline, params,
+        X_train, y_train, X_val, y_val,
+    )
 
-        # Generate validation predictions
-        predictions = pipeline.predict(X_val)
+    metrics = MlflowClient().get_run(run_id).data.metrics
 
-        # Calculate metrics
-        mae = mean_absolute_error(y_val, predictions)
+    results.append({
+        "model": model_name,
+        "MAE": metrics["mae"],
+        "RMSE": metrics["rmse"],
+        "R2": metrics["r2"],
+    })
 
-        rmse = mean_squared_error(
-            y_val, predictions
-        ) ** 0.5
-
-        r2 = r2_score(y_val, predictions)
-
-        # Store results
-        results.append({
-            "model": model_name,
-            "MAE": mae,
-            "RMSE": rmse,
-            "R2": r2,
-        })
-
-        trained_pipelines[model_name] = pipeline
-
-        # Log parameters
-        mlflow.log_param("model_name", model_name)
-        mlflow.log_param("test_size", 0.2)
-        mlflow.log_param("random_state", 42)
-        mlflow.log_param("training_rows", len(X_train))
-        mlflow.log_param("validation_rows", len(X_val))
-        mlflow.log_param("data_sha256", data_sha256)
-
-        # Log model-specific parameters
-        mlflow.log_params(model.get_params())
-
-        # Log metrics
-        mlflow.log_metric("MAE", mae)
-        mlflow.log_metric("RMSE", rmse)
-        mlflow.log_metric("R2", r2)
-
-        # Log complete pipeline
-        mlflow.sklearn.log_model(
-            pipeline,
-            name="model",
-            serialization_format="cloudpickle",
-        )
-
-        # Save logged model URI for registration
-        best_model_uris[model_name] = (
-            mlflow.get_artifact_uri("model")
-        )
-
-        print(f"\n{model_name}")
-        print("MAE:", mae)
-        print("RMSE:", rmse)
-        print("R2:", r2)
+    print(f"\n{model_name}")
+    print("MAE:", metrics["mae"])
+    print("RMSE:", metrics["rmse"])
+    print("R2:", metrics["r2"])
 
 
 # --------------------------------------------------
-# 6. SELECT BEST MODEL
+# 5. SAVE MODEL COMPARISON REPORT
 # --------------------------------------------------
-
-best_result = min(
-    results,
-    key=lambda result: result["MAE"]
-)
-
-best_model_name = best_result["model"]
-
-best_pipeline = trained_pipelines[best_model_name]
-
-print("\nBEST MODEL:", best_model_name)
-print("Best MAE:", best_result["MAE"])
-print("Best RMSE:", best_result["RMSE"])
-print("Best R2:", best_result["R2"])
-
-
-# --------------------------------------------------
-# 7. SAVE BEST MODEL LOCALLY
-# --------------------------------------------------
-
-MODEL_DIR = Path("models")
-MODEL_DIR.mkdir(parents=True, exist_ok=True)
-
-BEST_MODEL_PATH = MODEL_DIR / "best_model_v1"
-
-mlflow.sklearn.save_model(
-    best_pipeline,
-    path=str(BEST_MODEL_PATH),
-    serialization_format="cloudpickle",
-)
-
-print("\nBest model saved to:", BEST_MODEL_PATH)
-
-
-# --------------------------------------------------
-# 8. SAVE MODEL COMPARISON REPORT
-# --------------------------------------------------
-
-results_df = pd.DataFrame(results)
 
 REPORT_DIR = Path("reports")
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-results_df.to_csv(
+pd.DataFrame(results).to_csv(
     REPORT_DIR / "model_comparison.csv",
     index=False,
 )
@@ -227,42 +148,41 @@ print("\nModel comparison saved to reports/model_comparison.csv")
 
 
 # --------------------------------------------------
-# 9. REGISTER BEST MODEL IN MLFLOW
+# 6. REGISTER BEST MODEL AND SET THE CHAMPION ALIAS
 # --------------------------------------------------
 
-model_uri = best_model_uris[best_model_name]
-
-registered_model = mlflow.register_model(
-    model_uri=model_uri,
-    name=registered_model_name,
+best_run_id, version = promote_best(
+    EXPERIMENT_NAME, REGISTERED_MODEL_NAME
 )
 
-client = MlflowClient()
-
-client.set_registered_model_alias(
-    registered_model_name,
-    "champion",
-    registered_model.version,
-)
-
-print("\nMODEL REGISTRATION SUCCESSFUL")
-print("Model:", registered_model_name)
-print("Version:", registered_model.version)
-print("Alias: champion")
+best_name = min(results, key=lambda r: r["MAE"])["model"]
 
 
 # --------------------------------------------------
-# 10. FINAL SUMMARY
+# 7. SAVE THE CHAMPION FOR THE API
+# --------------------------------------------------
+
+MODEL_DIR = Path("models")
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+joblib.dump(
+    load_champion(REGISTERED_MODEL_NAME),
+    MODEL_DIR / "model.joblib",
+)
+
+print("\nChampion saved to models/model.joblib")
+
+
+# --------------------------------------------------
+# 8. FINAL SUMMARY
 # --------------------------------------------------
 
 print("\n" + "=" * 50)
 print("TRAINING COMPLETED SUCCESSFULLY")
 print("=" * 50)
 
-print("Best model:", best_model_name)
-print("MAE:", best_result["MAE"])
-print("RMSE:", best_result["RMSE"])
-print("R2:", best_result["R2"])
-print("Registered model:", registered_model_name)
-print("Registered version:", registered_model.version)
+print("Best model:", best_name)
+print("Best run id:", best_run_id)
+print("Registered model:", REGISTERED_MODEL_NAME)
+print("Registered version:", version)
 print("Alias: champion")
