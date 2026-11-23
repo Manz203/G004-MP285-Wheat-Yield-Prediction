@@ -53,6 +53,19 @@ def test_run_experiment_returns_run_id_and_mae(data):
     assert 0 <= mae < 1
 
 
+def test_run_experiment_logs_rmse_and_r2(data):
+    X_train, y_train, X_val, y_val = data
+
+    run_id, _ = run_experiment(
+        "ridge", make_model(), {"alpha": 1.0},
+        X_train, y_train, X_val, y_val,
+    )
+
+    metrics = MlflowClient().get_run(run_id).data.metrics
+    assert {"mae", "rmse", "r2"} <= set(metrics)
+    assert metrics["rmse"] >= metrics["mae"]
+
+
 def test_get_best_run_picks_lowest_mae(data):
     X_train, y_train, X_val, y_val = data
 

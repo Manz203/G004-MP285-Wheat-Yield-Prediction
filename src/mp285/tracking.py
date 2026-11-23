@@ -9,7 +9,7 @@ Usage in a training script:
 
 import mlflow
 from mlflow import MlflowClient
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 EXPERIMENT_NAME = "wheat_yield"
 MODEL_NAME = "wheat_yield_model"
@@ -28,15 +28,21 @@ def run_experiment(name, model, params, X_train, y_train, X_val, y_val):
 
     The model should be the full pipeline (preprocessor + estimator)
     so that the registered model accepts raw columns.
+    Logs mae, rmse and r2 on the validation data.
     Returns (run_id, mae).
     """
     with mlflow.start_run(run_name=name) as run:
         mlflow.log_params(params)
 
         model.fit(X_train, y_train)
-        mae = mean_absolute_error(y_val, model.predict(X_val))
+        predictions = model.predict(X_val)
+
+        mae = mean_absolute_error(y_val, predictions)
+        rmse = mean_squared_error(y_val, predictions) ** 0.5
 
         mlflow.log_metric("mae", mae)
+        mlflow.log_metric("rmse", rmse)
+        mlflow.log_metric("r2", r2_score(y_val, predictions))
         # cloudpickle because the default skops format rejects some
         # types used by the preprocessing pipeline
         mlflow.sklearn.log_model(
